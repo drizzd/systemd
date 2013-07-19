@@ -154,8 +154,8 @@ static int output_short(
         const void *data;
         size_t length;
         size_t n = 0;
-        _cleanup_free_ char *hostname = NULL, *identifier = NULL, *comm = NULL, *pid = NULL, *fake_pid = NULL, *message = NULL, *realtime = NULL, *monotonic = NULL, *priority = NULL;
-        size_t hostname_len = 0, identifier_len = 0, comm_len = 0, pid_len = 0, fake_pid_len = 0, message_len = 0, realtime_len = 0, monotonic_len = 0, priority_len = 0;
+        _cleanup_free_ char *hostname = NULL, *identifier = NULL, *pid = NULL, *fake_pid = NULL, *realtime = NULL, *monotonic = NULL, *priority = NULL;
+        size_t hostname_len = 0, identifier_len = 0, pid_len = 0, fake_pid_len = 0, realtime_len = 0, monotonic_len = 0, priority_len = 0;
         int p = LOG_INFO;
 
         assert(f);
@@ -183,12 +183,6 @@ static int output_short(
                 else if (r > 0)
                         continue;
 
-                r = parse_field(data, length, "_COMM=", &comm, &comm_len);
-                if (r < 0)
-                        return r;
-                else if (r > 0)
-                        continue;
-
                 r = parse_field(data, length, "_PID=", &pid, &pid_len);
                 if (r < 0)
                         return r;
@@ -210,22 +204,10 @@ static int output_short(
                 r = parse_field(data, length, "_SOURCE_MONOTONIC_TIMESTAMP=", &monotonic, &monotonic_len);
                 if (r < 0)
                         return r;
-                else if (r > 0)
-                        continue;
-
-                r = parse_field(data, length, "MESSAGE=", &message, &message_len);
-                if (r < 0)
-                        return r;
         }
 
         if (r < 0)
                 return r;
-
-        if (!message)
-                return 0;
-
-        if (!(flags & OUTPUT_SHOW_ALL))
-                strip_tab_ansi(&message, &message_len);
 
         if (priority_len == 1 && *priority >= '0' && *priority <= '7')
                 p = *priority - '0';
@@ -290,9 +272,6 @@ static int output_short(
         if (identifier && shall_print(identifier, identifier_len, flags)) {
                 fprintf(f, " %.*s", (int) identifier_len, identifier);
                 n += identifier_len + 1;
-        } else if (comm && shall_print(comm, comm_len, flags)) {
-                fprintf(f, " %.*s", (int) comm_len, comm);
-                n += comm_len + 1;
         } else
                 fputc(' ', f);
 
@@ -304,13 +283,7 @@ static int output_short(
                 n += fake_pid_len + 2;
         }
 
-        if (!(flags & OUTPUT_SHOW_ALL) && !utf8_is_printable(message, message_len)) {
-                char bytes[FORMAT_BYTES_MAX];
-                fprintf(f, ": [%s blob data]\n", format_bytes(bytes, sizeof(bytes), message_len));
-        } else {
-                fputs(": ", f);
-                print_multiline(f, n + 2, n_columns, flags, p, message, message_len);
-        }
+	fprintf(f, "\n");
 
         if (flags & OUTPUT_CATALOG)
                 print_catalog(f, j);
