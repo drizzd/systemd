@@ -55,6 +55,12 @@ static int print_catalog(FILE *f, sd_journal *j) {
         return 0;
 }
 
+static int is_field(const void *data, size_t length, const char *field) {
+        size_t fl = strlen(field);
+
+        return length >= fl+1 && !memcmp(data, field, fl) && ((const char *)data)[fl] == '=';
+}
+
 static int parse_field(const void *data, size_t length, const char *field, char **target, size_t *target_size) {
         size_t fl, nl;
         void *buf;
@@ -424,6 +430,16 @@ static int output_export(
                 if (length >= 9 &&
                     hasprefix(data, "_BOOT_ID="))
                         continue;
+
+		/* Skip payload */
+		if (is_field(data, length, "_COMM")
+				|| is_field(data, length, "MESSAGE")
+				|| is_field(data, length, "_CMDLINE")
+				|| is_field(data, length, "_EXE")
+				|| is_field(data, length, "SYSLOG_IDENTIFIER")
+				|| (length >= 8 && hasprefix(data, "COREDUMP"))
+				|| (length >= 5 && hasprefix(data, "CODE_")))
+			continue;
 
                 if (!utf8_is_printable(data, length)) {
                         const char *c;
