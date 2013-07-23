@@ -157,91 +157,18 @@ static int output_short(
                 OutputFlags flags) {
 
         int r;
-        const void *data;
-        size_t length;
-        size_t n = 0;
-        _cleanup_free_ char *hostname = NULL, *identifier = NULL, *pid = NULL, *fake_pid = NULL, *realtime = NULL, *monotonic = NULL, *priority = NULL;
-        size_t hostname_len = 0, identifier_len = 0, pid_len = 0, fake_pid_len = 0, realtime_len = 0, monotonic_len = 0, priority_len = 0;
-        int p = LOG_INFO;
+        _cleanup_free_ char *realtime = NULL, *cursor = NULL;
 
         assert(f);
         assert(j);
 
-        sd_journal_set_data_threshold(j, flags & OUTPUT_SHOW_ALL ? 0 : PRINT_THRESHOLD);
+	r = sd_journal_get_cursor(j, &cursor);
+	if (r < 0) {
+		log_error("Failed to get cursor: %s", strerror(-r));
+		return r;
+	}
 
-        JOURNAL_FOREACH_DATA_RETVAL(j, data, length, r) {
-
-                r = parse_field(data, length, "PRIORITY=", &priority, &priority_len);
-                if (r < 0)
-                        return r;
-                else if (r > 0)
-                        continue;
-
-                r = parse_field(data, length, "_HOSTNAME=", &hostname, &hostname_len);
-                if (r < 0)
-                        return r;
-                else if (r > 0)
-                        continue;
-
-                r = parse_field(data, length, "SYSLOG_IDENTIFIER=", &identifier, &identifier_len);
-                if (r < 0)
-                        return r;
-                else if (r > 0)
-                        continue;
-
-                r = parse_field(data, length, "_PID=", &pid, &pid_len);
-                if (r < 0)
-                        return r;
-                else if (r > 0)
-                        continue;
-
-                r = parse_field(data, length, "SYSLOG_PID=", &fake_pid, &fake_pid_len);
-                if (r < 0)
-                        return r;
-                else if (r > 0)
-                        continue;
-
-                r = parse_field(data, length, "_SOURCE_REALTIME_TIMESTAMP=", &realtime, &realtime_len);
-                if (r < 0)
-                        return r;
-                else if (r > 0)
-                        continue;
-
-                r = parse_field(data, length, "_SOURCE_MONOTONIC_TIMESTAMP=", &monotonic, &monotonic_len);
-                if (r < 0)
-                        return r;
-        }
-
-        if (r < 0)
-                return r;
-
-        if (priority_len == 1 && *priority >= '0' && *priority <= '7')
-                p = *priority - '0';
-
-        if (mode == OUTPUT_SHORT_MONOTONIC) {
-                uint64_t t;
-                sd_id128_t boot_id;
-
-                r = -ENOENT;
-
-                if (monotonic)
-                        r = safe_atou64(monotonic, &t);
-
-                if (r < 0)
-                        r = sd_journal_get_monotonic_usec(j, &t, &boot_id);
-
-                if (r < 0) {
-                        log_error("Failed to get monotonic timestamp: %s", strerror(-r));
-                        return r;
-                }
-
-                fprintf(f, "[%5llu.%06llu]",
-                        (unsigned long long) (t / USEC_PER_SEC),
-                        (unsigned long long) (t % USEC_PER_SEC));
-
-                n += 1 + 5 + 1 + 6 + 1;
-
-        } else {
+        {
                 char buf[64];
                 uint64_t x;
                 time_t t;
@@ -267,32 +194,10 @@ static int output_short(
                 }
 
                 fputs(buf, f);
-                n += strlen(buf);
         }
 
-        if (hostname && shall_print(hostname, hostname_len, flags)) {
-                fprintf(f, " %.*s", (int) hostname_len, hostname);
-                n += hostname_len + 1;
-        }
-
-        if (identifier && shall_print(identifier, identifier_len, flags)) {
-                fprintf(f, " %.*s", (int) identifier_len, identifier);
-                n += identifier_len + 1;
-        } else
-                fputc(' ', f);
-
-        if (pid && shall_print(pid, pid_len, flags)) {
-                fprintf(f, "[%.*s]", (int) pid_len, pid);
-                n += pid_len + 2;
-        } else if (fake_pid && shall_print(fake_pid, fake_pid_len, flags)) {
-                fprintf(f, "[%.*s]", (int) fake_pid_len, fake_pid);
-                n += fake_pid_len + 2;
-        }
-
-	fprintf(f, "\n");
-
-        if (flags & OUTPUT_CATALOG)
-                print_catalog(f, j);
+	fprintf(f, " %s\n", j->current_file->path);
+	fprintf(f, "[%s]\n", cursor);
 
         return 0;
 }
